@@ -38,6 +38,17 @@ def normalize_domain(netloc):
     return host
 
 
+def canonical_url(url: str) -> str:
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return url
+    host = normalize_domain(parsed.netloc).lower()
+    path = parsed.path or "/"
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{host}{path}{query}"
+
+
 def url_in_domain(url, domain):
     parsed = urllib.parse.urlparse(url)
     host = normalize_domain(parsed.netloc)
@@ -118,6 +129,7 @@ def crawl(base_url):
         rp = None
 
     seen_ok, already_ok = load_seen(domain)
+    seen_ok_canon = {canonical_url(u) for u in seen_ok}
     seen = set()
     if already_ok >= MAX_PAGES_PER_DOMAIN:
         print(f"[skip] {domain} already has {already_ok} pages (>= max {MAX_PAGES_PER_DOMAIN})")
@@ -144,18 +156,24 @@ def crawl(base_url):
 
     q = queue.Queue()
     queued = set()
+    queued_canon = set()
     for u in start_urls:
+        key = canonical_url(u)
+        if key in queued_canon:
+            continue
         q.put(u)
         queued.add(u)
+        queued_canon.add(key)
     saved = already_ok
     request_idx = 0
 
     while not q.empty() and saved < MAX_PAGES_PER_DOMAIN:
         url = q.get()
-        if url in seen or not url_in_domain(url, domain):
+        ckey = canonical_url(url)
+        if ckey in seen or not url_in_domain(url, domain):
             continue
-        seen.add(url)
-        already_crawled = url in seen_ok
+        seen.add(ckey)
+        already_crawled = ckey in seen_ok_canon
         skip_save = DUPLICATE_MODE == "skip" and already_crawled
         timestamp = datetime.now().date().isoformat()
         request_idx += 1
@@ -224,6 +242,7 @@ def crawl(base_url):
             path = save_text(text, url, OUTPUT_DIR)
             print(f"Saved : {len(text)}\n")
             seen_ok.add(url)
+            seen_ok_canon.add(ckey)
             log_csv(
                 {
                     "url": url,
@@ -239,11 +258,13 @@ def crawl(base_url):
 
         soup_links = extract_links(html, url)
         for link in soup_links:
-            if DUPLICATE_MODE == "skip" and link in seen_ok:
+            c_link = canonical_url(link)
+            if DUPLICATE_MODE == "skip" and c_link in seen_ok_canon:
                 continue
-            if link not in seen and link not in queued and url_in_domain(link, domain):
+            if c_link not in seen and c_link not in queued_canon and url_in_domain(link, domain):
                 q.put(link)
                 queued.add(link)
+                queued_canon.add(c_link)
 
         if REQUEST_DELAY:
             time.sleep(REQUEST_DELAY)
