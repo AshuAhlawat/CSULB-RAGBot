@@ -9,3 +9,9 @@
 - Get the latest data from the url's that were deemed relvant, and use it to re-index those blocks, and replace the older ones
 - Pass the data retrieved into context, and try to answer the question by supplementing from context.
 - For any follow up questions, use only the context present unless some other data is needed
+- If no relevant documents are found say so
+- After the question is anwered llm reflects if the answer is accurate to the question, if not, ask to be specific with the question.
+
+![Sample Logs](image.png)
+
+![Sample Output](image-1.png)
